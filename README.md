@@ -80,14 +80,15 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 
 ## Installing from GitHub Packages
 
-npmjs is the canonical registry; the same versions are mirrored to GitHub
-Packages. To install from the mirror, point the `@hew-lang` scope at the GitHub
-npm registry in an `.npmrc` (GitHub Packages requires an authenticated token,
-even for installs):
+This package is published to **GitHub Packages**, the canonical registry for the
+`@hew-lang` scope (it is not on npmjs — it depends on the GitHub-Packages-only
+`@hew-lang/sandbox-wasm` and `@hew-lang/sandbox-vm`). Point the scope at GitHub
+Packages in an `.npmrc` (GitHub Packages requires an authenticated token — a
+`read:packages` PAT — even for installs):
 
 ```ini
 @hew-lang:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
 ```
 
 ## License
