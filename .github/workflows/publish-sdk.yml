@@ -1,0 +1,131 @@
+name: Publish (npmjs canonical + GitHub Packages mirror)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run packaging checks without publishing"
+        required: true
+        default: true
+        type: boolean
+      registry_url:
+        description: "Canonical registry URL to publish to"
+        required: true
+        default: "https://registry.npmjs.org/"
+        type: string
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-npm:
+    name: Publish to npmjs (canonical)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: ${{ inputs.registry_url }}
+
+      - name: Show package metadata
+        run: npm pkg get name version
+
+      - name: Verify registry
+        run: npm ping --registry "${{ inputs.registry_url }}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate SDK package
+        run: |
+          npm run typecheck:sdk
+          npm run test:sdk
+          npm pack --ignore-scripts --dry-run
+
+      - name: Check whether version is already published
+        id: guard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@hew-lang/playground-sandbox@${VERSION}" version --registry "${{ inputs.registry_url }}" >/dev/null 2>&1; then
+            echo "Version ${VERSION} already published to ${{ inputs.registry_url }}; skipping real publish."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dry-run publish
+        if: ${{ inputs.dry_run }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --dry-run --registry "${{ inputs.registry_url }}"
+
+      - name: Publish to npmjs
+        if: ${{ !inputs.dry_run && steps.guard.outputs.exists == 'false' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --registry "${{ inputs.registry_url }}"
+
+  mirror-github-packages:
+    name: Mirror to GitHub Packages
+    needs: publish-npm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://npm.pkg.github.com
+          scope: "@hew-lang"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate SDK package
+        run: |
+          npm run typecheck:sdk
+          npm run test:sdk
+
+      - name: Check whether version is already published
+        id: guard
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if npm view "@hew-lang/playground-sandbox@${VERSION}" version --registry https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "Version ${VERSION} already on GitHub Packages; skipping real publish."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dry-run publish
+        if: ${{ inputs.dry_run }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --dry-run --registry https://npm.pkg.github.com
+
+      - name: Publish to GitHub Packages
+        if: ${{ !inputs.dry_run && steps.guard.outputs.exists == 'false' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --registry https://npm.pkg.github.com

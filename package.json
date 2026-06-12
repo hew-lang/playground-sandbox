@@ -1,0 +1,52 @@
+{
+  "name": "@hew-lang/playground-sandbox",
+  "version": "0.1.0",
+  "description": "Local / in-browser execution client for the Hew sandbox VM. Complements @hew-lang/playground-client (remote HTTP execution).",
+  "author": "Stephen Olesen",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/hew-playground-sandbox.js",
+  "types": "./dist/hew-playground-sandbox.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/hew-playground-sandbox.d.ts",
+      "import": "./dist/hew-playground-sandbox.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "hew-playground-sandbox.ts"
+  ],
+  "scripts": {
+    "clean:sdk": "rm -rf dist",
+    "build:sdk": "tsc -p tsconfig.sdk.json",
+    "typecheck:sdk": "tsc --noEmit -p tsconfig.sdk.json",
+    "typecheck:sdk:consumer": "npm run build:sdk && tsc --noEmit -p tsconfig.sdk-consumer.json",
+    "test:sdk": "npm run build:sdk && node --test hew-playground-sandbox.test.mjs && tsc --noEmit -p tsconfig.sdk-consumer.json",
+    "prepack": "npm run clean:sdk && npm run build:sdk"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hew-lang/playground-sandbox.git"
+  },
+  "homepage": "https://github.com/hew-lang/playground-sandbox#readme",
+  "bugs": {
+    "url": "https://github.com/hew-lang/playground-sandbox/issues"
+  },
+  "license": "MIT",
+  "keywords": [
+    "hew",
+    "playground",
+    "sandbox",
+    "wasm",
+    "typescript",
+    "sdk"
+  ],
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
