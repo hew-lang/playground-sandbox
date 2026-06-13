@@ -41,6 +41,8 @@ jobs:
         run: npm pkg get name version
 
       - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.HEW_PACKAGES_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: npm ci
 
       - name: Validate SDK package
