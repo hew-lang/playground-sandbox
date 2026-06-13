@@ -3,7 +3,6 @@ import test from 'node:test';
 
 import {
   HewSandboxClient,
-  PlaygroundSandboxError,
   SandboxBytecodeVersionError,
   createHewSandboxClient,
   isPlaygroundSandboxError,
@@ -139,13 +138,14 @@ test('run() forwards seed and stepBudget to the interpreter', async () => {
   assert.deepEqual(received, { stepBudget: 1000, replay: { seed: 7 } });
 });
 
-test('loadPublishedSandbox throws until upstreams are published', async () => {
-  await assert.rejects(
-    () => loadPublishedSandbox(),
-    (error) => {
-      assert.ok(error instanceof PlaygroundSandboxError);
-      assert.equal(error.code, 'upstreams_unpublished');
-      return true;
-    },
-  );
+test('loadPublishedSandbox compiles and runs through the published upstreams', async () => {
+  const loaded = await loadPublishedSandbox();
+  assert.equal(typeof loaded.compiler.compileToSandboxBytecode, 'function');
+  assert.equal(typeof loaded.interpreter.runBytecode, 'function');
+
+  const client = new HewSandboxClient(loaded);
+  const result = await client.run('fn main() { println("hi"); }');
+
+  assert.equal(result.success, true, JSON.stringify(result.diagnostics));
+  assert.match(result.stdout, /hi/);
 });

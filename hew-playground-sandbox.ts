@@ -16,11 +16,9 @@
  *     `runBytecode` executes a package into a `SandboxTrace`, and
  *     `buildPlaygroundState` shapes that trace for a playground UI.
  *
- * Until those packages are published (see "milestone 0" in the README), inject
- * the `compiler` and `interpreter` implementations yourself via
- * {@link HewSandboxClientOptions}. The port interfaces below mirror the
- * upstream public surfaces, so the default wiring becomes a drop-in once they
- * ship.
+ * Inject the `compiler` and `interpreter` implementations yourself via
+ * {@link HewSandboxClientOptions}, or use {@link loadPublishedSandbox} to load
+ * the published upstream packages.
  */
 
 /** Canonical sandbox bytecode schema version this client interprets. */
@@ -255,23 +253,98 @@ export function isPlaygroundSandboxError(error: unknown): error is PlaygroundSan
   return error instanceof PlaygroundSandboxError;
 }
 
-/**
- * Default wiring placeholder. Once `@hew-lang/sandbox-wasm` and
- * `@hew-lang/sandbox-vm` are published from the hew monorepo (milestone 0),
- * this will dynamically import them, initialize the wasm module, and return a
- * ready `{ compiler, interpreter }` pair. Until then it throws so callers must
- * inject implementations explicitly.
- */
 export async function loadPublishedSandbox(): Promise<{
   compiler: SandboxCompiler;
   interpreter: SandboxInterpreter;
 }> {
-  throw new PlaygroundSandboxError(
-    'upstreams_unpublished',
-    'Default sandbox wiring requires @hew-lang/sandbox-wasm and @hew-lang/sandbox-vm to be ' +
-      'published (milestone 0). Until then, inject `compiler` and `interpreter` via ' +
-      'HewSandboxClientOptions.',
+  const wasmModule = await import('@hew-lang/sandbox-wasm');
+  await initializeSandboxWasm(wasmModule);
+
+  const vmModule = await import('@hew-lang/sandbox-vm');
+  const compileToSandboxBytecode = requireExport<
+    (source: string, profile: string) => string | CompileOutput
+  >(wasmModule, 'compileToSandboxBytecode', '@hew-lang/sandbox-wasm');
+  const runBytecode = requireExport<SandboxInterpreter['runBytecode']>(
+    vmModule,
+    'runBytecode',
+    '@hew-lang/sandbox-vm',
   );
+  const buildPlaygroundState = optionalExport<SandboxInterpreter['buildPlaygroundState']>(
+    vmModule,
+    'buildPlaygroundState',
+  );
+
+  return {
+    compiler: {
+      compileToSandboxBytecode(source: string, profile = DEFAULT_SANDBOX_PROFILE): CompileOutput {
+        return parseCompileOutput(compileToSandboxBytecode(source, profile));
+      },
+    },
+    interpreter: {
+      runBytecode,
+      ...(buildPlaygroundState ? { buildPlaygroundState } : {}),
+    },
+  };
+}
+
+type SandboxWasmModule = typeof import('@hew-lang/sandbox-wasm');
+
+async function initializeSandboxWasm(wasmModule: SandboxWasmModule): Promise<void> {
+  if (isNodeRuntime()) {
+    const wasmBytes = await readNodeSandboxWasmBytes();
+    if (typeof wasmModule.initSync === 'function') {
+      wasmModule.initSync({ module: wasmBytes });
+      return;
+    }
+    await wasmModule.default(wasmBytes);
+    return;
+  }
+
+  await wasmModule.default();
+}
+
+function parseCompileOutput(output: string | CompileOutput): CompileOutput {
+  if (typeof output !== 'string') {
+    return output;
+  }
+  return JSON.parse(output) as CompileOutput;
+}
+
+function requireExport<T>(
+  module: Record<string, unknown>,
+  name: string,
+  packageName: string,
+): T {
+  const value = module[name];
+  if (typeof value !== 'function') {
+    throw new PlaygroundSandboxError(
+      'upstream_export_missing',
+      `${packageName} did not export required function ${name}.`,
+    );
+  }
+  return value as T;
+}
+
+function optionalExport<T>(module: Record<string, unknown>, name: string): T | undefined {
+  const value = module[name];
+  return typeof value === 'function' ? (value as T) : undefined;
+}
+
+function isNodeRuntime(): boolean {
+  return Boolean(
+    (globalThis as { process?: { versions?: { node?: string } } }).process?.versions?.node,
+  );
+}
+
+async function readNodeSandboxWasmBytes(): Promise<Uint8Array> {
+  const { createRequire } = (await import('node:module')) as {
+    createRequire(url: string): { resolve(specifier: string): string };
+  };
+  const { readFileSync } = (await import('node:fs')) as {
+    readFileSync(path: string): Uint8Array;
+  };
+  const require = createRequire(import.meta.url);
+  return readFileSync(require.resolve('@hew-lang/sandbox-wasm/sandbox_wasm_bg.wasm'));
 }
 
 function hasErrorDiagnostic(diagnostics: SandboxDiagnostic[]): boolean {

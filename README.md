@@ -14,33 +14,26 @@ where that package runs code **remotely over HTTP**, this one executes Hew
                  └─────────────────────────────┘   (bytecode v0)   (SandboxTrace)
 ```
 
-## Status — milestone 0 (pre-wiring)
+## Status
 
 This package is the **glue** between two upstream artifacts from the
 [`hew-lang/hew`](https://github.com/hew-lang/hew) monorepo:
 
 | Upstream | Role | Published as |
 | --- | --- | --- |
-| `hew-sandbox-wasm` | wasm compiler: parse + type-check + fail-closed profile gate, emits `hew.sandbox.bytecode.v0` | `@hew-lang/sandbox-wasm` *(pending)* |
-| `hew-sandbox-vm` | deterministic TS interpreter: `runBytecode` + `buildPlaygroundState` | `@hew-lang/sandbox-vm` *(pending)* |
+| `hew-sandbox-wasm` | wasm compiler: parse + type-check + fail-closed profile gate, emits `hew.sandbox.bytecode.v0` | `@hew-lang/sandbox-wasm` |
+| `hew-sandbox-vm` | deterministic TS interpreter: `runBytecode` + `buildPlaygroundState` | `@hew-lang/sandbox-vm` |
 
-Those two packages are **not published yet**. Until they are, inject the
-`compiler` and `interpreter` implementations yourself (see below). The port
-interfaces in this package mirror the upstream public surfaces, so the default
-wiring becomes a drop-in once they ship — at which point
-`loadPublishedSandbox()` will dynamically import and initialize them instead of
-throwing.
+Inject `compiler` and `interpreter` implementations yourself, or call
+`loadPublishedSandbox()` to dynamically import and initialize the published
+upstreams.
 
 ## Usage
 
 ```ts
-import { HewSandboxClient } from '@hew-lang/playground-sandbox';
+import { HewSandboxClient, loadPublishedSandbox } from '@hew-lang/playground-sandbox';
 
-// Inject the upstream compiler + interpreter (until they publish on npm):
-const client = new HewSandboxClient({
-  compiler,     // implements compileToSandboxBytecode(source, profile)
-  interpreter,  // implements runBytecode(pkg) [+ buildPlaygroundState(trace)]
-});
+const client = new HewSandboxClient(await loadPublishedSandbox());
 
 const result = await client.run('fn main() { println("hi"); }', { seed: 1 });
 if (result.success) {
@@ -48,6 +41,15 @@ if (result.success) {
 } else {
   console.error(result.status, result.diagnostics);
 }
+```
+
+You can still inject custom ports directly:
+
+```ts
+const client = new HewSandboxClient({
+  compiler,     // implements compileToSandboxBytecode(source, profile)
+  interpreter,  // implements runBytecode(pkg) [+ buildPlaygroundState(trace)]
+});
 ```
 
 The `success` / `stdout` / `stderr` / `exit_code` fields mirror
@@ -69,7 +71,7 @@ the expected version via the `expectedBytecodeVersion` client option.
 | --- | --- |
 | `HewSandboxClient` | Client with `run(source, options)`. |
 | `createHewSandboxClient(options)` | Factory helper. |
-| `loadPublishedSandbox()` | Default wiring (throws until upstreams publish). |
+| `loadPublishedSandbox()` | Default wiring for the published upstream packages. |
 | `isPlaygroundSandboxError(e)` | Type guard for `PlaygroundSandboxError`. |
 | `SANDBOX_BYTECODE_SCHEMA_VERSION`, `DEFAULT_SANDBOX_PROFILE` | Constants. |
 
