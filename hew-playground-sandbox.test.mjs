@@ -5,6 +5,7 @@ import {
   HewSandboxClient,
   SandboxBytecodeVersionError,
   createHewSandboxClient,
+  isNativeOnlyRefusal,
   isPlaygroundSandboxError,
   loadPublishedSandbox,
 } from './dist/hew-playground-sandbox.js';
@@ -48,6 +49,14 @@ function errorDiagnostic(message = 'boom') {
     notes: [],
     suggestions: [],
   };
+}
+
+function nativeOnlyDiagnostics(message = 'native FFI declarations are unavailable in the browser sandbox') {
+  const span = { start: 0, end: 48 };
+  return [
+    { severity: 'error', phase: 'profile', message, span, start_offset: 0, end_offset: 48, kind: 'Unsupported::NATIVE_ONLY', notes: [], suggestions: [] },
+    { severity: 'error', phase: 'profile', message, span, start_offset: 0, end_offset: 48, kind: 'sandbox_profile_rejected', notes: [], suggestions: [] },
+  ];
 }
 
 test('run() maps a successful trace to the result envelope', async () => {
@@ -97,6 +106,27 @@ test('run() short-circuits on compile diagnostics and never interprets', async (
   assert.equal(result.status, 'compile_error');
   assert.equal(result.trace, null);
   assert.equal(result.diagnostics.length, 1);
+  assert.equal(result.engine, 'local');
+  assert.equal(isNativeOnlyRefusal(result), false);
+});
+
+test('run() classifies a native-only capability rejection distinctly from an ordinary compile error', async () => {
+  const client = createHewSandboxClient({
+    compiler: {
+      compileToSandboxBytecode: () => ({ diagnostics: nativeOnlyDiagnostics(), bytecode: null }),
+    },
+    interpreter: {
+      runBytecode: () => trace(),
+    },
+    compilerVersion: '0.6.0-rc4',
+  });
+
+  const result = await client.run('extern "C" { fn f() -> i64; }\nfn main() {}');
+  assert.equal(result.success, false);
+  assert.equal(result.status, 'sandbox_rejected');
+  assert.equal(result.engine, 'local');
+  assert.equal(result.compiler_version, '0.6.0-rc4');
+  assert.equal(isNativeOnlyRefusal(result), true);
 });
 
 test('run() rejects a bytecode version the interpreter does not support', async () => {

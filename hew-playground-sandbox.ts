@@ -144,6 +144,8 @@ export interface SandboxRunResult {
   compiler_version?: string;
   trace: SandboxTrace | null;
   state: PlaygroundState | null;
+  /** Which engine produced this result. This package only ever produces `'local'`. */
+  engine: 'local';
 }
 
 export interface HewSandboxClientOptions {
@@ -159,6 +161,12 @@ export interface HewSandboxClientOptions {
    * enforcing the compiler/VM version contract rather than failing silently.
    */
   expectedBytecodeVersion?: string;
+  /**
+   * The `@hew-lang/sandbox-wasm` package version, reported on every result
+   * (including compile failures, which carry no bytecode package to read a
+   * version from). {@link loadPublishedSandbox} fills this in automatically.
+   */
+  compilerVersion?: string;
 }
 
 export class PlaygroundSandboxError extends Error {
@@ -193,6 +201,7 @@ export class HewSandboxClient {
   private readonly interpreter: SandboxInterpreter;
   private readonly profile: string;
   private readonly expectedBytecodeVersion: string;
+  private readonly compilerVersion?: string;
 
   constructor(options: HewSandboxClientOptions) {
     this.compiler = options.compiler;
@@ -200,6 +209,7 @@ export class HewSandboxClient {
     this.profile = options.profile ?? DEFAULT_SANDBOX_PROFILE;
     this.expectedBytecodeVersion =
       options.expectedBytecodeVersion ?? SANDBOX_BYTECODE_SCHEMA_VERSION;
+    this.compilerVersion = options.compilerVersion;
   }
 
   async run(source: string, options: SandboxRunOptions = {}): Promise<SandboxRunResult> {
@@ -213,10 +223,12 @@ export class HewSandboxClient {
         stdout: '',
         stderr: '',
         exit_code: null,
-        status: 'compile_error',
+        status: diagnosticsRefuseNativeOnly(diagnostics) ? 'sandbox_rejected' : 'compile_error',
         diagnostics,
+        compiler_version: this.compilerVersion,
         trace: null,
         state: null,
+        engine: 'local',
       };
     }
 
@@ -238,11 +250,25 @@ export class HewSandboxClient {
       exit_code: final?.exit_code ?? null,
       status: trace.result,
       diagnostics,
-      compiler_version: compiled.bytecode.compiler_version,
+      compiler_version: compiled.bytecode.compiler_version ?? this.compilerVersion,
       trace,
       state,
+      engine: 'local',
     };
   }
+}
+
+/**
+ * A rejection is native-only capability admission, not an ordinary compile
+ * error, when `hew-sandbox-wasm`'s profile pass emits its paired
+ * `Unsupported::NATIVE_ONLY` / `sandbox_profile_rejected` diagnostics
+ * (`hew-sandbox-wasm/src/profile.rs`, `reject_native_only`). Callers use this
+ * to offer "run remotely" instead of showing a plain compile error.
+ */
+function diagnosticsRefuseNativeOnly(diagnostics: SandboxDiagnostic[]): boolean {
+  return diagnostics.some(
+    (diagnostic) => diagnostic.phase === 'profile' && diagnostic.kind === 'sandbox_profile_rejected',
+  );
 }
 
 export function createHewSandboxClient(options: HewSandboxClientOptions): HewSandboxClient {
@@ -253,9 +279,20 @@ export function isPlaygroundSandboxError(error: unknown): error is PlaygroundSan
   return error instanceof PlaygroundSandboxError;
 }
 
+/** True when a result's `status` is a native-only capability refusal, not an ordinary compile error. */
+export function isNativeOnlyRefusal(result: Pick<SandboxRunResult, 'status'>): boolean {
+  return result.status === 'sandbox_rejected';
+}
+
 export async function loadPublishedSandbox(): Promise<{
   compiler: SandboxCompiler;
   interpreter: SandboxInterpreter;
+  /**
+   * The installed `@hew-lang/sandbox-wasm` package version, best-effort. Used
+   * to report `compiler_version` on results that carry no bytecode package
+   * (compile errors and native-only refusals).
+   */
+  compilerVersion?: string;
 }> {
   const wasmModule = await import('@hew-lang/sandbox-wasm');
   await initializeSandboxWasm(wasmModule);
@@ -284,7 +321,34 @@ export async function loadPublishedSandbox(): Promise<{
       runBytecode,
       ...(buildPlaygroundState ? { buildPlaygroundState } : {}),
     },
+    compilerVersion: await readSandboxWasmVersion(),
   };
+}
+
+/**
+ * Best-effort read of `@hew-lang/sandbox-wasm`'s own `package.json` version.
+ * Node resolves this reliably via `createRequire`; bundler-based browser
+ * builds may not (no `package.json` export map entry today), in which case
+ * this resolves to `undefined` and callers fall back to omitting the field.
+ */
+async function readSandboxWasmVersion(): Promise<string | undefined> {
+  // Node resolves this reliably via createRequire. In a bundled browser
+  // build there is no filesystem to read package.json from directly; a site
+  // wanting compiler_version there should pass HewSandboxClientOptions.compilerVersion
+  // explicitly (e.g. inlined at build time from its own dependency lockfile).
+  if (!isNodeRuntime()) {
+    return undefined;
+  }
+  try {
+    const { createRequire } = await import('node:module');
+    const { readFileSync } = await import('node:fs');
+    const require = createRequire(import.meta.url);
+    const pkgPath = require.resolve('@hew-lang/sandbox-wasm/package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
+    return pkg.version;
+  } catch {
+    return undefined;
+  }
 }
 
 type SandboxWasmModule = typeof import('@hew-lang/sandbox-wasm');
