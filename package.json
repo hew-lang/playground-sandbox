@@ -51,7 +51,7 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@hew-lang/sandbox-vm": "0.5.0",
-    "@hew-lang/sandbox-wasm": "0.5.0"
+    "@hew-lang/sandbox-vm": "0.6.0-rc4",
+    "@hew-lang/wasm": "0.6.0-rc4"
   }
 }
