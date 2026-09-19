@@ -2,11 +2,15 @@ name: Publish to GitHub Packages
 
 # GitHub Packages is the sole canonical registry for @hew-lang/playground-sandbox.
 # It is not mirrored to npmjs (it depends on the GitHub-Packages-only
-# @hew-lang/sandbox-wasm and @hew-lang/sandbox-vm).
+# @hew-lang/wasm and @hew-lang/sandbox-vm).
 
 on:
   workflow_dispatch:
     inputs:
+      release_tag:
+        description: "Immutable release tag to publish (for example v0.3.0)"
+        required: true
+        type: string
       dry_run:
         description: "Run packaging checks without publishing"
         required: true
@@ -14,7 +18,7 @@ on:
         type: boolean
 
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish-${{ inputs.release_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -29,13 +33,35 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
         with:
-          node-version: 22
+          node-version: 24
           registry-url: https://npm.pkg.github.com
           scope: "@hew-lang"
+
+      - name: Verify immutable release identity
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          if ! [[ "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::release_tag must be a SemVer tag beginning with v"
+            exit 1
+          fi
+          git show-ref --verify --quiet "refs/tags/${RELEASE_TAG}"
+          test "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")" = "$(git rev-parse HEAD)"
+          VERSION="$(node -p "require('./package.json').version")"
+          if [ "${VERSION}" != "${RELEASE_TAG#v}" ]; then
+            echo "::error::Package version ${VERSION} does not match ${RELEASE_TAG}"
+            exit 1
+          fi
+          npm pkg set "hewSource.commit=$(git rev-parse HEAD)" "hewSource.tag=${RELEASE_TAG}"
+          npm pkg set --json 'hewSource.dirty=false'
 
       - name: Show package metadata
         run: npm pkg get name version
