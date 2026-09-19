@@ -1,6 +1,6 @@
 {
   "name": "@hew-lang/playground-sandbox",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local / in-browser execution client for the Hew sandbox VM. Complements @hew-lang/playground-client (remote HTTP execution).",
   "author": "Stephen Olesen",
   "type": "module",
@@ -27,7 +27,8 @@
     "prepack": "npm run clean:sdk && npm run build:sdk"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://npm.pkg.github.com"
   },
   "repository": {
     "type": "git",
