@@ -11,7 +11,7 @@ const compiler: SandboxCompiler = {
     return {
       diagnostics: [],
       bytecode: {
-        schema_version: 'hew.sandbox.bytecode.v0',
+        schema_version: 'hew.sandbox.bytecode.v1',
         package_id: 'consumer-check',
         hew_version: '0.5.0',
         compiler_version: '0.5.0',
@@ -33,6 +33,7 @@ const interpreter: SandboxInterpreter = {
         stdout: [],
         stderr: [],
         diagnostics: [],
+        sandbox_rejections: [],
       },
     };
   },

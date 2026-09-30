@@ -10,8 +10,8 @@ where that package runs code **remotely over HTTP**, this one executes Hew
   remote  ──────▶│ @hew-lang/playground-client │──▶ livecode-v1.hew.sh
                  └─────────────────────────────┘
                  ┌─────────────────────────────┐   compile        interpret
-  local   ──────▶│ @hew-lang/playground-sandbox│──▶ sandbox-wasm ─▶ sandbox-vm
-                 └─────────────────────────────┘   (bytecode v0)   (SandboxTrace)
+  local   ──────▶│ @hew-lang/playground-sandbox│──▶ hew-wasm ─▶ sandbox-vm
+                 └─────────────────────────────┘   (verified SIR)   (SandboxTrace)
 ```
 
 ## Status
@@ -21,7 +21,7 @@ This package is the **glue** between two upstream artifacts from the
 
 | Upstream | Role | Published as |
 | --- | --- | --- |
-| `hew-sandbox-wasm` | wasm compiler: parse + type-check + fail-closed profile gate, emits `hew.sandbox.bytecode.v0` | `@hew-lang/sandbox-wasm` |
+| `hew-wasm` | Wasm compiler: native front end and verified SIR lowering, emits `hew.sandbox.bytecode.v1` | `@hew-lang/wasm` |
 | `hew-sandbox-vm` | deterministic TS interpreter: `runBytecode` + `buildPlaygroundState` | `@hew-lang/sandbox-vm` |
 
 Inject `compiler` and `interpreter` implementations yourself, or call
@@ -43,6 +43,14 @@ if (result.success) {
 }
 ```
 
+In a Vite-based browser application, pass the emitted asset URL so the compiler
+Wasm is included in the build:
+
+```ts
+import wasmUrl from '@hew-lang/wasm/wasm_bg.wasm?url';
+const client = new HewSandboxClient(await loadPublishedSandbox({ wasmUrl }));
+```
+
 You can still inject custom ports directly:
 
 ```ts
@@ -59,11 +67,15 @@ extensions (the full deterministic trace and the playground view model).
 
 ## Bytecode version contract
 
-The compiler emits `hew.sandbox.bytecode.v0`; the interpreter declares the
-version it understands. `run()` checks them and throws
-`SandboxBytecodeVersionError` on a mismatch rather than producing wrong output —
-upgrade `@hew-lang/sandbox-wasm` and `@hew-lang/sandbox-vm` together. Override
-the expected version via the `expectedBytecodeVersion` client option.
+The VM validates the compiler package before executing it. Upgrade
+`@hew-lang/wasm` and `@hew-lang/sandbox-vm` together. This client passes
+packages through to that authority rather than maintaining another schema gate.
+
+`result.sandbox_rejections` distinguishes native capabilities from missing VM
+implementation and invalid packages. `isNativeOnlyRefusal(result)` is true only
+when every rejection is a native capability. A UI may then offer an explicit
+**Run remotely** action. Compiler errors and VM defects must remain visible;
+remote execution is never an automatic fallback.
 
 ## API overview
 
@@ -73,18 +85,18 @@ the expected version via the `expectedBytecodeVersion` client option.
 | `createHewSandboxClient(options)` | Factory helper. |
 | `loadPublishedSandbox()` | Default wiring for the published upstream packages. |
 | `isPlaygroundSandboxError(e)` | Type guard for `PlaygroundSandboxError`. |
-| `SANDBOX_BYTECODE_SCHEMA_VERSION`, `DEFAULT_SANDBOX_PROFILE` | Constants. |
+| `DEFAULT_SANDBOX_PROFILE` | Default compiler profile. |
 
 Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 `SandboxRunResult`, `SandboxCompiler`, `SandboxInterpreter`, `CompileOutput`,
 `SandboxBytecodePackage`, `SandboxDiagnostic`, `SandboxTrace`, `PlaygroundState`,
-`SandboxRuntimeStatus`, `PlaygroundSandboxError`, `SandboxBytecodeVersionError`.
+`SandboxRuntimeStatus`, `SandboxRejection`, `PlaygroundSandboxError`.
 
 ## Installing from GitHub Packages
 
 This package is published to **GitHub Packages**, the canonical registry for the
 `@hew-lang` scope (it is not on npmjs — it depends on the GitHub-Packages-only
-`@hew-lang/sandbox-wasm` and `@hew-lang/sandbox-vm`). Point the scope at GitHub
+`@hew-lang/wasm` and `@hew-lang/sandbox-vm`). Point the scope at GitHub
 Packages in an `.npmrc` (GitHub Packages requires an authenticated token — a
 `read:packages` PAT — even for installs):
 

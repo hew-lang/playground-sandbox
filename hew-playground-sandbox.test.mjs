@@ -3,18 +3,17 @@ import test from 'node:test';
 
 import {
   HewSandboxClient,
-  SandboxBytecodeVersionError,
   createHewSandboxClient,
-  isPlaygroundSandboxError,
+  isNativeOnlyRefusal,
   loadPublishedSandbox,
 } from './dist/hew-playground-sandbox.js';
 
 function bytecode(overrides = {}) {
   return {
-    schema_version: 'hew.sandbox.bytecode.v0',
+    schema_version: 'hew.sandbox.bytecode.v1',
     package_id: 'pkg-1',
-    hew_version: '0.5.0',
-    compiler_version: '0.5.0',
+    hew_version: '0.6.0-rc4',
+    compiler_version: '0.6.0-rc4',
     profile: 'sandbox-vm-export',
     ...overrides,
   };
@@ -31,6 +30,7 @@ function trace(overrides = {}) {
       stdout: ['hello\n'],
       stderr: [],
       diagnostics: [],
+      sandbox_rejections: [],
     },
     ...overrides,
   };
@@ -72,7 +72,7 @@ test('run() maps a successful trace to the result envelope', async () => {
   assert.equal(result.stderr, '');
   assert.equal(result.exit_code, 0);
   assert.equal(result.status, 'ok');
-  assert.equal(result.compiler_version, '0.5.0');
+  assert.equal(result.compiler_version, '0.6.0-rc4');
   assert.ok(result.trace);
   assert.deepEqual(result.state, { schema_version: 'hew.sandbox.playground.v0' });
 });
@@ -97,29 +97,37 @@ test('run() short-circuits on compile diagnostics and never interprets', async (
   assert.equal(result.status, 'compile_error');
   assert.equal(result.trace, null);
   assert.equal(result.diagnostics.length, 1);
+  assert.equal(result.engine, 'local');
+  assert.equal(isNativeOnlyRefusal(result), false);
 });
 
-test('run() rejects a bytecode version the interpreter does not support', async () => {
-  const client = new HewSandboxClient({
-    compiler: {
-      compileToSandboxBytecode: () => ({
-        diagnostics: [],
-        bytecode: bytecode({ schema_version: 'hew.sandbox.bytecode.v1' }),
-      }),
-    },
-    interpreter: { runBytecode: () => trace() },
-  });
-
-  await assert.rejects(
-    () => client.run('fn main() {}'),
-    (error) => {
-      assert.ok(error instanceof SandboxBytecodeVersionError);
-      assert.equal(error.expected, 'hew.sandbox.bytecode.v0');
-      assert.equal(error.actual, 'hew.sandbox.bytecode.v1');
-      assert.equal(isPlaygroundSandboxError(error), true);
-      return true;
-    },
-  );
+test('admission results preserve the VM decision and offer remote only for native capabilities', async () => {
+  for (const [categories, remote] of [
+    [['native_only'], true],
+    [['not_implemented'], false],
+    [['invalid_package'], false],
+    [['native_only', 'not_implemented'], false],
+    [[], false],
+  ]) {
+    const sandbox_rejections = categories.map((category) => ({
+      category, code: 'unsupported', capability: 'FileRead::Open',
+      message: 'Capability unavailable', span: null,
+    }));
+    const rejected = trace({ result: 'sandbox_rejected' });
+    rejected.final_state.status = 'sandbox_rejected';
+    rejected.final_state.stdout = [];
+    rejected.final_state.exit_code = null;
+    rejected.final_state.sandbox_rejections = sandbox_rejections;
+    const client = createHewSandboxClient({
+      compiler: { compileToSandboxBytecode: () => ({ diagnostics: [], bytecode: bytecode() }) },
+      interpreter: { runBytecode: () => rejected },
+    });
+    const result = await client.run('fn main() {}');
+    assert.equal(result.status, 'sandbox_rejected');
+    assert.equal(result.stdout, '');
+    assert.deepEqual(result.sandbox_rejections, sandbox_rejections);
+    assert.equal(isNativeOnlyRefusal(result), remote);
+  }
 });
 
 test('run() forwards seed and stepBudget to the interpreter', async () => {
@@ -148,4 +156,51 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
 
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.match(result.stdout, /hi/);
+});
+
+test('published compiler returns diagnostics without offering remote execution', async () => {
+  const client = new HewSandboxClient(await loadPublishedSandbox());
+  for (const source of [
+    'fn main( {',
+    'fn main() { let count: i64 = "not a number"; println(count); }',
+  ]) {
+    const result = await client.run(source);
+    assert.equal(result.success, false);
+    assert.equal(result.status, 'compile_error');
+    assert.ok(result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
+    assert.equal(isNativeOnlyRefusal(result), false);
+  }
+});
+
+test('published sandbox refuses filesystem access as native-only', async () => {
+  const client = new HewSandboxClient(await loadPublishedSandbox());
+  const result = await client.run(`
+import std.fs;
+fn main() {
+    match fs.read("secret.txt") {
+        .Ok(contents) => println(contents),
+        .Err(_) => println("read failed"),
+    }
+}
+`);
+
+  assert.equal(result.success, false);
+  assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
+  assert.equal(result.stdout, '');
+  assert.equal(isNativeOnlyRefusal(result), true);
+});
+
+test('published sandbox enforces the budget and isolates the next run', async () => {
+  const client = new HewSandboxClient(await loadPublishedSandbox());
+  const exhausted = await client.run(
+    'fn main() { println("stale"); var i = 0; while true { i = i + 1; } }',
+    { stepBudget: 25 },
+  );
+  assert.equal(exhausted.success, false);
+  assert.equal(exhausted.status, 'budget_exhausted');
+  assert.equal(isNativeOnlyRefusal(exhausted), false);
+
+  const next = await client.run('fn main() { println("fresh"); }');
+  assert.equal(next.success, true, JSON.stringify(next.diagnostics));
+  assert.equal(next.stdout, 'fresh\n');
 });
