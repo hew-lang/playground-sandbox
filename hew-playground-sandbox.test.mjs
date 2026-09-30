@@ -158,7 +158,7 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, 'hi\n');
   assert.equal(result.exit_code, 0);
-  assert.equal(result.compiler_version, '0.6.0-rc4');
+  assert.equal(result.compiler_version, 'hew-wasm-0.6.0-rc4');
   assert.equal(result.hew_version, '0.6.0-rc4');
   assert.deepEqual(result.sandbox_rejections, []);
   assert.equal(result.state?.schema_version, 'hew.sandbox.playground.v0');
@@ -199,7 +199,7 @@ fn main() {
   assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, '');
   assert.equal(result.exit_code, null);
-  assert.equal(result.compiler_version, '0.6.0-rc4');
+  assert.equal(result.compiler_version, 'hew-wasm-0.6.0-rc4');
   assert.equal(isNativeOnlyRefusal(result), true);
   assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability?.startsWith('FileRead::')));
   assert.deepEqual(result.sandbox_rejections, result.trace.final_state.sandbox_rejections);
