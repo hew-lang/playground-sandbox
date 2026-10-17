@@ -98,9 +98,8 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 
 ## Installing from GitHub Packages
 
-This package is published to **GitHub Packages**, the canonical registry for the
-`@hew-lang` scope (it is not on npmjs — it depends on the GitHub-Packages-only
-`@hew-lang/wasm` and `@hew-lang/sandbox-vm`). Point the scope at GitHub
+This package is published to **GitHub Packages**, the canonical registry for this wrapper. The compiler and VM also have public npmjs mirrors;
+this wrapper is installed through GitHub Packages. Point the scope at GitHub
 Packages in an `.npmrc` (GitHub Packages requires an authenticated token — a
 `read:packages` PAT — even for installs):
 
