@@ -1,8 +1,8 @@
 name: Publish to GitHub Packages
 
 # GitHub Packages is the sole canonical registry for @hew-lang/playground-sandbox.
-# It is not mirrored to npmjs (it depends on the GitHub-Packages-only
-# @hew-lang/wasm and @hew-lang/sandbox-vm).
+# The wrapper is not mirrored to npmjs; the compiler and VM have separate
+# upstream publication workflows.
 
 on:
   workflow_dispatch:
