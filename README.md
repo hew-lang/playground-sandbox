@@ -16,6 +16,10 @@ where that package runs code **remotely over HTTP**, this one executes Hew
 
 ## Status
 
+This release pins both published engines to Hew 0.6.1. Native-only operations
+remain explicit capability refusals in the browser; remote execution is a
+separate user choice.
+
 This package is the **glue** between two upstream artifacts from the
 [`hew-lang/hew`](https://github.com/hew-lang/hew) monorepo:
 
