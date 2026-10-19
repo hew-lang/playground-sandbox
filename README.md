@@ -96,17 +96,32 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 `SandboxBytecodePackage`, `SandboxDiagnostic`, `SandboxTrace`, `PlaygroundState`,
 `SandboxRuntimeStatus`, `SandboxRejection`, `PlaygroundSandboxError`.
 
-## Installing from GitHub Packages
+## Install
 
-This package is published to **GitHub Packages**, the canonical registry for this wrapper. The compiler and VM also have public npmjs mirrors;
-this wrapper is installed through GitHub Packages. Point the scope at GitHub
-Packages in an `.npmrc` (GitHub Packages requires an authenticated token — a
-`read:packages` PAT — even for installs):
+Install the compiled archive from the versioned public release:
 
-```ini
-@hew-lang:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```bash
+npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.1/hew-lang-playground-sandbox-0.3.1.tgz
 ```
+
+The archive includes JavaScript and TypeScript declarations. Its compiler and VM
+dependencies are available on public npm; no GitHub package token is required.
+Remove any older `@hew-lang` override to GitHub Packages, or point it at
+`https://registry.npmjs.org/`. Commit your package-manager lockfile to pin archive
+integrity. The release also includes `SHA256SUMS`.
+
+## Release archives
+
+After publication approval, tag a version matching `package.json`. The **Release**
+workflow checks the exact tag/version, installs and tests using public engine
+archives with the same locked integrity, and publishes the compiled SDK archive
+and `SHA256SUMS` with the release notes. The build does not need package-registry
+credentials. It records the source tag and commit in `hewSource` metadata.
+
+An approved older tag can be packaged with the workflow's `release_tag` input.
+Reruns compare existing assets and refuse to replace different bytes. Existing
+GitHub Packages publication remains a separate optional workflow; its package
+ownership and permissions are unchanged.
 
 ## License
 
