@@ -292,6 +292,11 @@ export async function loadPublishedSandbox(options: SandboxLoadOptions = {}): Pr
     'runBytecode',
     '@hew-lang/sandbox-vm',
   );
+  const codecBridge = requireExport<(request: string) => string>(
+    wasmModule,
+    'executeCodec',
+    '@hew-lang/wasm',
+  );
   const buildPlaygroundState = optionalExport<SandboxInterpreter['buildPlaygroundState']>(
     vmModule,
     'buildPlaygroundState',
@@ -304,7 +309,7 @@ export async function loadPublishedSandbox(options: SandboxLoadOptions = {}): Pr
       },
     },
     interpreter: {
-      runBytecode,
+      runBytecode: (pkg, runOptions) => runBytecode(pkg, { ...runOptions, codecBridge }),
       ...(buildPlaygroundState ? { buildPlaygroundState } : {}),
     },
     compilerVersion: await readCompilerVersion(),

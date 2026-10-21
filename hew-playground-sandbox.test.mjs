@@ -150,7 +150,7 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   const loaded = await loadPublishedSandbox();
   assert.equal(typeof loaded.compiler.compileToSandboxBytecode, 'function');
   assert.equal(typeof loaded.interpreter.runBytecode, 'function');
-  assert.equal(loaded.compilerVersion, '0.6.2');
+  assert.equal(loaded.compilerVersion, '0.6.4');
 
   const client = new HewSandboxClient(loaded);
   const result = await client.run('fn main() { println("hi"); }');
@@ -158,8 +158,8 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, 'hi\n');
   assert.equal(result.exit_code, 0);
-  assert.equal(result.compiler_version, 'hew-wasm-0.6.2');
-  assert.equal(result.hew_version, '0.6.2');
+  assert.equal(result.compiler_version, 'hew-wasm-0.6.4');
+  assert.equal(result.hew_version, '0.6.4');
   assert.deepEqual(result.sandbox_rejections, []);
   assert.equal(result.state?.schema_version, 'hew.sandbox.playground.v0');
 });
@@ -174,7 +174,7 @@ test('published compiler preserves parse and type errors as local compile failur
     assert.equal(result.success, false);
     assert.equal(result.status, 'compile_error');
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
-    assert.equal(result.compiler_version, '0.6.2');
+    assert.equal(result.compiler_version, '0.6.4');
     assert.equal(result.engine, 'local');
     assert.equal(result.trace, null);
     assert.equal(result.state, null);
@@ -194,14 +194,14 @@ test('published compiler retains related definition notes and actionable suggest
   assert.ok(immutable.diagnostics.some((diagnostic) => diagnostic.suggestions.includes('consider changing this to `var text`')));
 });
 
-test('published VM reports a filesystem capability as an explicit native-only refusal', async () => {
+test('published VM reports TCP networking as an explicit native-only refusal', async () => {
   const client = new HewSandboxClient(await loadPublishedSandbox());
   const result = await client.run(`
-import std.fs;
+import std.net;
 fn main() {
-    match fs.read("secret.txt") {
-        .Ok(contents) => println(contents),
-        .Err(_) => println("read failed"),
+    match net.connect("127.0.0.1:9") {
+        .Ok(conn) => conn.close(),
+        .Err(_) => println("unavailable"),
     }
 }
 `);
@@ -210,9 +210,9 @@ fn main() {
   assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, '');
   assert.equal(result.exit_code, null);
-  assert.equal(result.compiler_version, 'hew-wasm-0.6.2');
+  assert.equal(result.compiler_version, 'hew-wasm-0.6.4');
   assert.equal(isNativeOnlyRefusal(result), true);
-  assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability?.startsWith('FileRead::')));
+  assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability === 'NativeIo::TcpConnect'));
   assert.deepEqual(result.sandbox_rejections, result.trace.final_state.sandbox_rejections);
 });
 
@@ -294,4 +294,24 @@ test('run waits for host completion before reading the trace or building state',
   complete(completed);
   assert.equal((await result).stdout, 'host completed\n');
   assert.equal(stateBuilt, true);
+});
+
+
+test('published sandbox uses the compiler codec bridge for generic wire values', async () => {
+  const client = new HewSandboxClient(await loadPublishedSandbox());
+  const result = await client.run(`
+import std.encoding.json;
+import std.encoding.cbor;
+#[wire]
+type Parcel<T> { item: T; }
+fn main() {
+    let value: Parcel<string> = Parcel { item: "retained".to_upper() };
+    assert(json.decode<Parcel<string>>(json.encode(value)).expect("JSON") == value);
+    assert(cbor.decode<Parcel<string>>(cbor.encode(value)).expect("CBOR") == value);
+    println(value.item);
+}
+`);
+  assert.equal(result.status, 'ok', JSON.stringify(result));
+  assert.equal(result.stdout, 'RETAINED\n');
+  assert.equal(result.exit_code, 0);
 });

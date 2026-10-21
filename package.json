@@ -1,6 +1,6 @@
 {
   "name": "@hew-lang/playground-sandbox",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Local / in-browser execution client for the Hew sandbox VM. Complements @hew-lang/playground-client (remote HTTP execution).",
   "author": "Stephen Olesen",
   "type": "module",
@@ -52,7 +52,7 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "@hew-lang/sandbox-vm": "0.6.2",
-    "@hew-lang/wasm": "0.6.2"
+    "@hew-lang/sandbox-vm": "0.6.4",
+    "@hew-lang/wasm": "0.6.4"
   }
 }
