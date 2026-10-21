@@ -12,8 +12,8 @@ function bytecode(overrides = {}) {
   return {
     schema_version: 'hew.sandbox.bytecode.v1',
     package_id: 'pkg-1',
-    hew_version: '0.6.1',
-    compiler_version: '0.6.1',
+    hew_version: '0.6.2',
+    compiler_version: '0.6.2',
     profile: 'sandbox-vm-export',
     ...overrides,
   };
@@ -57,7 +57,7 @@ test('run() maps a successful trace to the result envelope', async () => {
       compileToSandboxBytecode: () => ({ diagnostics: [], bytecode: bytecode() }),
     },
     interpreter: {
-      runBytecode: () => {
+      runBytecode: async () => {
         interpreted = true;
         return trace();
       },
@@ -72,7 +72,7 @@ test('run() maps a successful trace to the result envelope', async () => {
   assert.equal(result.stderr, '');
   assert.equal(result.exit_code, 0);
   assert.equal(result.status, 'ok');
-  assert.equal(result.compiler_version, '0.6.1');
+  assert.equal(result.compiler_version, '0.6.2');
   assert.ok(result.trace);
   assert.deepEqual(result.state, { schema_version: 'hew.sandbox.playground.v0' });
 });
@@ -84,7 +84,7 @@ test('run() short-circuits on compile diagnostics and never interprets', async (
       compileToSandboxBytecode: () => ({ diagnostics: [errorDiagnostic()], bytecode: null }),
     },
     interpreter: {
-      runBytecode: () => {
+      runBytecode: async () => {
         interpreted = true;
         return trace();
       },
@@ -120,7 +120,7 @@ test('admission results preserve the VM decision and offer remote only for nativ
     rejected.final_state.sandbox_rejections = sandbox_rejections;
     const client = createHewSandboxClient({
       compiler: { compileToSandboxBytecode: () => ({ diagnostics: [], bytecode: bytecode() }) },
-      interpreter: { runBytecode: () => rejected },
+      interpreter: { runBytecode: async () => rejected },
     });
     const result = await client.run('fn main() {}');
     assert.equal(result.status, 'sandbox_rejected');
@@ -135,7 +135,7 @@ test('run() forwards seed and stepBudget to the interpreter', async () => {
   const client = new HewSandboxClient({
     compiler: { compileToSandboxBytecode: () => ({ diagnostics: [], bytecode: bytecode() }) },
     interpreter: {
-      runBytecode: (_pkg, options) => {
+      runBytecode: async (_pkg, options) => {
         received = options;
         return trace();
       },
@@ -150,7 +150,7 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   const loaded = await loadPublishedSandbox();
   assert.equal(typeof loaded.compiler.compileToSandboxBytecode, 'function');
   assert.equal(typeof loaded.interpreter.runBytecode, 'function');
-  assert.equal(loaded.compilerVersion, '0.6.1');
+  assert.equal(loaded.compilerVersion, '0.6.2');
 
   const client = new HewSandboxClient(loaded);
   const result = await client.run('fn main() { println("hi"); }');
@@ -158,8 +158,8 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, 'hi\n');
   assert.equal(result.exit_code, 0);
-  assert.equal(result.compiler_version, 'hew-wasm-0.6.1');
-  assert.equal(result.hew_version, '0.6.1');
+  assert.equal(result.compiler_version, 'hew-wasm-0.6.2');
+  assert.equal(result.hew_version, '0.6.2');
   assert.deepEqual(result.sandbox_rejections, []);
   assert.equal(result.state?.schema_version, 'hew.sandbox.playground.v0');
 });
@@ -174,13 +174,24 @@ test('published compiler preserves parse and type errors as local compile failur
     assert.equal(result.success, false);
     assert.equal(result.status, 'compile_error');
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
-    assert.equal(result.compiler_version, '0.6.1');
+    assert.equal(result.compiler_version, '0.6.2');
     assert.equal(result.engine, 'local');
     assert.equal(result.trace, null);
     assert.equal(result.state, null);
     assert.deepEqual(result.sandbox_rejections, []);
     assert.equal(isNativeOnlyRefusal(result), false);
   }
+});
+
+test('published compiler retains related definition notes and actionable suggestions', async () => {
+  const client = new HewSandboxClient(await loadPublishedSandbox());
+  const duplicate = await client.run('fn same() {} fn same() {} fn main() {}');
+  assert.equal(duplicate.status, 'compile_error');
+  const definition = duplicate.diagnostics.find((diagnostic) => diagnostic.kind === 'DuplicateDefinition');
+  assert.equal(definition.notes[0].message, 'previous definition here');
+  assert.deepEqual(definition.notes[0].span, { start: 0, end: 13 });
+  const immutable = await client.run('fn main() { let text = "hello"; text = "again"; }');
+  assert.ok(immutable.diagnostics.some((diagnostic) => diagnostic.suggestions.includes('consider changing this to `var text`')));
 });
 
 test('published VM reports a filesystem capability as an explicit native-only refusal', async () => {
@@ -199,7 +210,7 @@ fn main() {
   assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, '');
   assert.equal(result.exit_code, null);
-  assert.equal(result.compiler_version, 'hew-wasm-0.6.1');
+  assert.equal(result.compiler_version, 'hew-wasm-0.6.2');
   assert.equal(isNativeOnlyRefusal(result), true);
   assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability?.startsWith('FileRead::')));
   assert.deepEqual(result.sandbox_rejections, result.trace.final_state.sandbox_rejections);
@@ -251,4 +262,36 @@ fn main() {
     assert.equal(result.stdout, '5\n8\n');
     assert.equal(result.exit_code, 0);
   }
+});
+
+
+test('run waits for host completion before reading the trace or building state', async () => {
+  let complete;
+  const pending = new Promise((resolve) => { complete = resolve; });
+  let stateBuilt = false;
+  const client = createHewSandboxClient({
+    compiler: { compileToSandboxBytecode: () => ({ diagnostics: [], bytecode: bytecode() }) },
+    interpreter: {
+      runBytecode: async (_pkg, options) => {
+        assert.equal(options.stepBudget, 50);
+        return pending;
+      },
+      buildPlaygroundState: (result) => {
+        assert.equal(result.final_state.stdout[0], 'host completed\n');
+        stateBuilt = true;
+        return { schema_version: 'hew.sandbox.playground.v0' };
+      },
+    },
+  });
+  const result = client.run('fn main() {}', { stepBudget: 50 });
+  let settled = false;
+  result.then(() => { settled = true; });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(settled, false);
+  assert.equal(stateBuilt, false);
+  const completed = trace();
+  completed.final_state.stdout = ['host completed\n'];
+  complete(completed);
+  assert.equal((await result).stdout, 'host completed\n');
+  assert.equal(stateBuilt, true);
 });

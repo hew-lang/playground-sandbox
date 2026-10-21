@@ -22,7 +22,7 @@ const compiler: SandboxCompiler = {
 };
 
 const interpreter: SandboxInterpreter = {
-  runBytecode(): SandboxTrace {
+  async runBytecode(): Promise<SandboxTrace> {
     return {
       schema_version: 'hew.sandbox.trace.v0',
       trace_id: 'consumer-check',
