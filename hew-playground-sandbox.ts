@@ -33,6 +33,15 @@ export interface SandboxDiagnosticSpan {
   end: number;
 }
 
+/** A related source location supplied by the compiler. */
+export interface SandboxDiagnosticNote {
+  span: SandboxDiagnosticSpan;
+  start_offset: number;
+  end_offset: number;
+  message: string;
+  source_module?: string;
+}
+
 /** Mirror of `hew-wasm`'s `Diagnostic`. */
 export interface SandboxDiagnostic {
   severity: string;
@@ -42,7 +51,7 @@ export interface SandboxDiagnostic {
   start_offset: number;
   end_offset: number;
   kind: string;
-  notes: unknown[];
+  notes: SandboxDiagnosticNote[];
   suggestions: string[];
   source_module?: string;
 }
@@ -131,7 +140,7 @@ export interface SandboxCompiler {
 
 /** Port for `@hew-lang/sandbox-vm`'s interpreter surface. */
 export interface SandboxInterpreter {
-  runBytecode(pkg: SandboxBytecodePackage, options?: Record<string, unknown>): SandboxTrace;
+  runBytecode(pkg: SandboxBytecodePackage, options?: Record<string, unknown>): SandboxTrace | Promise<SandboxTrace>;
   buildPlaygroundState?(trace: SandboxTrace): PlaygroundState;
 }
 
@@ -216,7 +225,7 @@ export class HewSandboxClient {
       };
     }
 
-    const trace = this.interpreter.runBytecode(compiled.bytecode, toInterpreterOptions(options));
+    const trace = await this.interpreter.runBytecode(compiled.bytecode, toInterpreterOptions(options));
     const state = this.interpreter.buildPlaygroundState
       ? this.interpreter.buildPlaygroundState(trace)
       : null;

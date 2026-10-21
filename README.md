@@ -16,7 +16,7 @@ where that package runs code **remotely over HTTP**, this one executes Hew
 
 ## Status
 
-This release pins both published engines to Hew 0.6.1. Native-only operations
+This release pins both published engines to Hew 0.6.2. Native-only operations
 remain explicit capability refusals in the browser; remote execution is a
 separate user choice.
 
@@ -60,7 +60,7 @@ You can still inject custom ports directly:
 ```ts
 const client = new HewSandboxClient({
   compiler,     // implements compileToSandboxBytecode(source, profile)
-  interpreter,  // implements runBytecode(pkg) [+ buildPlaygroundState(trace)]
+  interpreter,  // implements runBytecode(pkg), which may return a Promise [+ buildPlaygroundState(trace)]
 });
 ```
 
@@ -68,6 +68,11 @@ The `success` / `stdout` / `stderr` / `exit_code` fields mirror
 `@hew-lang/playground-client`'s `RunResponse`, so a UI can treat remote and
 local execution uniformly. `status`, `trace`, and `state` are sandbox-only
 extensions (the full deterministic trace and the playground view model).
+
+`run()` awaits the interpreter before reading the trace or building UI state.
+Injected interpreters may return a trace or a Promise; both use that single
+execution path. Compiler diagnostics, related notes and suggestions are passed
+through unchanged for the UI to present.
 
 ## Bytecode version contract
 
@@ -93,7 +98,7 @@ remote execution is never an automatic fallback.
 
 Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 `SandboxRunResult`, `SandboxCompiler`, `SandboxInterpreter`, `CompileOutput`,
-`SandboxBytecodePackage`, `SandboxDiagnostic`, `SandboxTrace`, `PlaygroundState`,
+`SandboxBytecodePackage`, `SandboxDiagnostic`, `SandboxDiagnosticNote`, `SandboxTrace`, `PlaygroundState`,
 `SandboxRuntimeStatus`, `SandboxRejection`, `PlaygroundSandboxError`.
 
 ## Install
@@ -101,7 +106,7 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 Install the compiled archive from the versioned public release:
 
 ```bash
-npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.1/hew-lang-playground-sandbox-0.3.1.tgz
+npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.2/hew-lang-playground-sandbox-0.3.2.tgz
 ```
 
 The archive includes JavaScript and TypeScript declarations. Its compiler and VM
