@@ -83,7 +83,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
-          if npm view "@hew-lang/playground-sandbox@${VERSION}" version --registry https://npm.pkg.github.com >/dev/null 2>&1; then
+          if npm view "@hew-lang/playground-sandbox@${VERSION}" version --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com >/dev/null 2>&1; then
             echo "Version ${VERSION} already on GitHub Packages; skipping real publish."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -94,10 +94,10 @@ jobs:
         if: ${{ inputs.dry_run }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --dry-run --registry https://npm.pkg.github.com
+        run: npm publish --dry-run --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com
 
       - name: Publish to GitHub Packages
         if: ${{ !inputs.dry_run && steps.guard.outputs.exists == 'false' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --registry https://npm.pkg.github.com
+        run: npm publish --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com
