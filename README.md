@@ -16,8 +16,9 @@ where that package runs code **remotely over HTTP**, this one executes Hew
 
 ## Status
 
-This release pins both published engines to Hew 0.6.4 and supplies their shared
-codec bridge for typed JSON and CBOR values. Native-only operations
+This release pins both published engines to Hew 0.7.0 and supplies their shared
+codec bridge for JSON, TOML and YAML values, plus typed JSON and CBOR messages.
+Native-only operations
 remain explicit capability refusals in the browser; remote execution is a
 separate user choice.
 
