@@ -150,7 +150,7 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   const loaded = await loadPublishedSandbox();
   assert.equal(typeof loaded.compiler.compileToSandboxBytecode, 'function');
   assert.equal(typeof loaded.interpreter.runBytecode, 'function');
-  assert.equal(loaded.compilerVersion, '0.6.4');
+  assert.equal(loaded.compilerVersion, '0.7.0');
 
   const client = new HewSandboxClient(loaded);
   const result = await client.run('fn main() { println("hi"); }');
@@ -158,8 +158,8 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, 'hi\n');
   assert.equal(result.exit_code, 0);
-  assert.equal(result.compiler_version, 'hew-wasm-0.6.4');
-  assert.equal(result.hew_version, '0.6.4');
+  assert.equal(result.compiler_version, 'hew-wasm-0.7.0');
+  assert.equal(result.hew_version, '0.7.0');
   assert.deepEqual(result.sandbox_rejections, []);
   assert.equal(result.state?.schema_version, 'hew.sandbox.playground.v0');
 });
@@ -174,7 +174,7 @@ test('published compiler preserves parse and type errors as local compile failur
     assert.equal(result.success, false);
     assert.equal(result.status, 'compile_error');
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
-    assert.equal(result.compiler_version, '0.6.4');
+    assert.equal(result.compiler_version, '0.7.0');
     assert.equal(result.engine, 'local');
     assert.equal(result.trace, null);
     assert.equal(result.state, null);
@@ -210,7 +210,7 @@ fn main() {
   assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, '');
   assert.equal(result.exit_code, null);
-  assert.equal(result.compiler_version, 'hew-wasm-0.6.4');
+  assert.equal(result.compiler_version, 'hew-wasm-0.7.0');
   assert.equal(isNativeOnlyRefusal(result), true);
   assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability === 'NativeIo::TcpConnect'));
   assert.deepEqual(result.sandbox_rejections, result.trace.final_state.sandbox_rejections);
@@ -315,3 +315,24 @@ fn main() {
   assert.equal(result.stdout, 'RETAINED\n');
   assert.equal(result.exit_code, 0);
 });
+
+for (const [format, document] of [['json', '{"count":7}'], ['toml', 'count = 7'], ['yaml', 'count: 7']]) {
+  test(`published sandbox preserves independent ${format.toUpperCase()} values and parser errors`, async () => {
+    const client = new HewSandboxClient(await loadPublishedSandbox());
+    const result = await client.run(`
+import std.encoding.${format};
+fn main() {
+    let original = ${format}.parse(${JSON.stringify(document)}).expect("document");
+    var changed = original;
+    changed.set("count", ${format}.from_int(9)).expect("mapping");
+    let restored = ${format}.parse(changed.stringify().expect("encode")).expect("decode");
+    assert(original.get_field("count").expect("mapping").expect("count").get_int().expect("integer") == 7);
+    println(restored.get_field("count").expect("mapping").expect("count").get_int().expect("integer"));
+    assert(${format}.parse("[").is_err());
+}
+`);
+    assert.equal(result.status, 'ok', JSON.stringify(result));
+    assert.equal(result.stdout, '9\n');
+    assert.equal(result.exit_code, 0);
+  });
+}
