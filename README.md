@@ -16,7 +16,7 @@ where that package runs code **remotely over HTTP**, this one executes Hew
 
 ## Status
 
-This release pins both published engines to Hew 0.9.1 and supplies their shared
+This release pins both published engines to Hew 0.9.2 and supplies their shared
 codec bridge for JSON, TOML and YAML values, plus typed JSON and CBOR messages.
 Native-only operations
 remain explicit capability refusals in the browser; remote execution is a
@@ -108,7 +108,7 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 Install the compiled archive from the versioned public release:
 
 ```bash
-npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.6/hew-lang-playground-sandbox-0.3.6.tgz
+npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.7/hew-lang-playground-sandbox-0.3.7.tgz
 ```
 
 The archive includes JavaScript and TypeScript declarations. Its compiler and VM

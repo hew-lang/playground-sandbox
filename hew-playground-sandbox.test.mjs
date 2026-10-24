@@ -150,7 +150,7 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   const loaded = await loadPublishedSandbox();
   assert.equal(typeof loaded.compiler.compileToSandboxBytecode, 'function');
   assert.equal(typeof loaded.interpreter.runBytecode, 'function');
-  assert.equal(loaded.compilerVersion, '0.9.1');
+  assert.equal(loaded.compilerVersion, '0.9.2');
 
   const client = new HewSandboxClient(loaded);
   const result = await client.run('fn main() { println("hi"); }');
@@ -158,8 +158,8 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, 'hi\n');
   assert.equal(result.exit_code, 0);
-  assert.equal(result.compiler_version, 'hew-wasm-0.9.1');
-  assert.equal(result.hew_version, '0.9.1');
+  assert.equal(result.compiler_version, 'hew-wasm-0.9.2');
+  assert.equal(result.hew_version, '0.9.2');
   assert.deepEqual(result.sandbox_rejections, []);
   assert.equal(result.state?.schema_version, 'hew.sandbox.playground.v0');
 });
@@ -174,7 +174,7 @@ test('published compiler preserves parse and type errors as local compile failur
     assert.equal(result.success, false);
     assert.equal(result.status, 'compile_error');
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
-    assert.equal(result.compiler_version, '0.9.1');
+    assert.equal(result.compiler_version, '0.9.2');
     assert.equal(result.engine, 'local');
     assert.equal(result.trace, null);
     assert.equal(result.state, null);
@@ -210,7 +210,7 @@ fn main() {
   assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, '');
   assert.equal(result.exit_code, null);
-  assert.equal(result.compiler_version, 'hew-wasm-0.9.1');
+  assert.equal(result.compiler_version, 'hew-wasm-0.9.2');
   assert.equal(isNativeOnlyRefusal(result), true);
   assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability === 'NativeIo::TcpConnect'));
   assert.deepEqual(result.sandbox_rejections, result.trace.final_state.sandbox_rejections);
@@ -372,4 +372,29 @@ fn main() {
   const trace = await loaded.interpreter.runBytecode(tests.tests[0].bytecode);
   assert.equal(trace.final_state.status, 'ok', JSON.stringify(trace));
   assert.equal(trace.final_state.stdout.join(''), 'READY:42\n1500\n');
+});
+
+
+test('published engines resolve embedded directory peers for single-source and project entries', async () => {
+  const loaded = await loadPublishedSandbox();
+  const source = String.raw`
+import std.net.http.codec;
+fn main() {
+    let response = codec.parse_response("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+        .expect("valid response").expect("complete response");
+    println(response.body());
+}
+`;
+  const result = await new HewSandboxClient(loaded).run(source);
+  assert.equal(result.status, 'ok', JSON.stringify(result));
+  assert.equal(result.stdout, 'ok\n');
+
+  const compiler = await import('@hew-lang/wasm');
+  const project = JSON.parse(compiler.compileProjectToSandboxBytecode(JSON.stringify({
+    entry: 'main.hew', files: [{ path: 'main.hew', source }],
+  }), 'sandbox-vm-export'));
+  assert.ok(project.bytecode, JSON.stringify(project));
+  const trace = await loaded.interpreter.runBytecode(project.bytecode);
+  assert.equal(trace.final_state.status, 'ok', JSON.stringify(trace));
+  assert.equal(trace.final_state.stdout.join(''), 'ok\n');
 });
