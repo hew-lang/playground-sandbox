@@ -16,7 +16,7 @@ where that package runs code **remotely over HTTP**, this one executes Hew
 
 ## Status
 
-This release pins both published engines to Hew 0.10.0 and supplies their shared
+This prerelease pins both published engines to Hew 0.11.0-rc3 and supplies their shared
 codec bridge for JSON, TOML and YAML values, plus typed JSON and CBOR messages.
 Native-only operations
 remain explicit capability refusals in the browser; remote execution is a
@@ -108,7 +108,7 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 Install the compiled archive from the versioned public release:
 
 ```bash
-npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.9/hew-lang-playground-sandbox-0.3.9.tgz
+npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.10-rc.3/hew-lang-playground-sandbox-0.3.10-rc.3.tgz
 ```
 
 The archive includes JavaScript and TypeScript declarations. Its compiler and VM
@@ -124,6 +124,8 @@ workflow checks the exact tag/version, installs and tests using public engine
 archives with the same locked integrity, and publishes the compiled SDK archive
 and `SHA256SUMS` with the release notes. The build does not need package-registry
 credentials. It records the source tag and commit in `hewSource` metadata.
+Prerelease tags produce GitHub prereleases; the optional GitHub Packages
+publisher uses the `next` dist-tag for them, leaving `latest` unchanged.
 
 An approved older tag can be packaged with the workflow's `release_tag` input.
 Reruns compare existing assets and refuse to replace different bytes. Existing
