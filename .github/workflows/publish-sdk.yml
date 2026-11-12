@@ -94,10 +94,16 @@ jobs:
         if: ${{ inputs.dry_run }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --dry-run --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com
+        run: |
+          tag=latest
+          if [[ "$(node -p "require('./package.json').version")" == *-* ]]; then tag=next; fi
+          npm publish --dry-run --tag "$tag" --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com
 
       - name: Publish to GitHub Packages
         if: ${{ !inputs.dry_run && steps.guard.outputs.exists == 'false' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm publish --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com
+        run: |
+          tag=latest
+          if [[ "$(node -p "require('./package.json').version")" == *-* ]]; then tag=next; fi
+          npm publish --tag "$tag" --registry https://npm.pkg.github.com --@hew-lang:registry=https://npm.pkg.github.com

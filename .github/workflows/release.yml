@@ -79,7 +79,11 @@ jobs:
         run: |
           set -euo pipefail
           if ! gh release view "$RELEASE_TAG" --json tagName >/dev/null; then
-            gh release create "$RELEASE_TAG" --verify-tag --generate-notes
+            args=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then
+              args+=(--prerelease)
+            fi
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes "${args[@]}"
           fi
           gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/existing-sdk-assets"
           mkdir -p "$RUNNER_TEMP/previous-sdk-assets"
