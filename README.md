@@ -105,11 +105,9 @@ Exported types: `HewSandboxClientOptions`, `SandboxRunOptions`,
 
 ## Install
 
-Install the compiled archive from the versioned public release:
-
-```bash
-npm install https://github.com/hew-lang/playground-sandbox/releases/download/v0.3.11/hew-lang-playground-sandbox-0.3.11.tgz
-```
+Open the [SDK releases](https://github.com/hew-lang/playground-sandbox/releases),
+copy the URL of the `.tgz` archive for the version you want, and pass that URL to
+`npm install`.
 
 The archive includes JavaScript and TypeScript declarations. Its compiler and VM
 dependencies are available on public npm; no GitHub package token is required.
