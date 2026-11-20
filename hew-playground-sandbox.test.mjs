@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import manifest from './package.json' with { type: 'json' };
 
 import {
   HewSandboxClient,
@@ -7,6 +8,8 @@ import {
   isNativeOnlyRefusal,
   loadPublishedSandbox,
 } from './dist/hew-playground-sandbox.js';
+
+const engineVersion = manifest.dependencies['@hew-lang/wasm'];
 
 function bytecode(overrides = {}) {
   return {
@@ -150,7 +153,7 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   const loaded = await loadPublishedSandbox();
   assert.equal(typeof loaded.compiler.compileToSandboxBytecode, 'function');
   assert.equal(typeof loaded.interpreter.runBytecode, 'function');
-  assert.equal(loaded.compilerVersion, '0.11.0');
+  assert.equal(loaded.compilerVersion, engineVersion);
 
   const client = new HewSandboxClient(loaded);
   const result = await client.run('fn main() { println("hi"); }');
@@ -158,10 +161,29 @@ test('loadPublishedSandbox compiles and runs through the published upstreams', a
   assert.equal(result.success, true, JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, 'hi\n');
   assert.equal(result.exit_code, 0);
-  assert.equal(result.compiler_version, 'hew-wasm-0.11.0');
-  assert.equal(result.hew_version, '0.11.0');
+  assert.equal(result.compiler_version, `hew-wasm-${engineVersion}`);
+  assert.equal(result.hew_version, engineVersion);
   assert.deepEqual(result.sandbox_rejections, []);
   assert.equal(result.state?.schema_version, 'hew.sandbox.playground.v0');
+});
+
+test('published engines normalize an offset timestamp captured from text', async () => {
+  const client = new HewSandboxClient(await loadPublishedSandbox());
+  const result = await client.run(`
+import std.time.datetime;
+
+fn main() {
+    match "at 1970-01-01T01:29:59.999999999+01:30" {
+        re"^at (?P<date_text>.+)$" => {
+            let stamp = datetime.parse_iso8601(date_text).expect("timestamp");
+            println(datetime.to_iso8601(stamp).expect("UTC representation"));
+        }
+        _ => panic("missing timestamp"),
+    }
+}
+`);
+  assert.equal(result.status, 'ok', JSON.stringify(result.sandbox_rejections));
+  assert.equal(result.stdout, '1969-12-31T23:59:59.999999999Z\n');
 });
 
 test('published engines retain actor failure details and format a recovery message', async () => {
@@ -202,7 +224,7 @@ test('published compiler preserves parse and type errors as local compile failur
     assert.equal(result.success, false);
     assert.equal(result.status, 'compile_error');
     assert.ok(result.diagnostics.some((diagnostic) => diagnostic.severity === 'error'));
-    assert.equal(result.compiler_version, '0.11.0');
+    assert.equal(result.compiler_version, engineVersion);
     assert.equal(result.engine, 'local');
     assert.equal(result.trace, null);
     assert.equal(result.state, null);
@@ -238,7 +260,7 @@ fn main() {
   assert.equal(result.status, 'sandbox_rejected', JSON.stringify(result.diagnostics));
   assert.equal(result.stdout, '');
   assert.equal(result.exit_code, null);
-  assert.equal(result.compiler_version, 'hew-wasm-0.11.0');
+  assert.equal(result.compiler_version, `hew-wasm-${engineVersion}`);
   assert.equal(isNativeOnlyRefusal(result), true);
   assert.ok(result.sandbox_rejections.every((rejection) => rejection.capability === 'NativeIo::TcpConnect'));
   assert.deepEqual(result.sandbox_rejections, result.trace.final_state.sandbox_rejections);
