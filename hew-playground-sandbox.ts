@@ -272,7 +272,7 @@ export interface SandboxLoadOptions {
 
 export async function loadPublishedSandbox(options: SandboxLoadOptions = {}): Promise<{
   compiler: SandboxCompiler;
-  interpreter: SandboxInterpreter;
+  interpreter: Pick<SandboxInterpreter, 'buildPlaygroundState'> & Pick<typeof import('@hew-lang/sandbox-vm'), 'runBytecode'>;
   /**
    * The installed `@hew-lang/wasm` package version, best-effort. Used
    * to report `compiler_version` on results that carry no bytecode package
@@ -287,16 +287,16 @@ export async function loadPublishedSandbox(options: SandboxLoadOptions = {}): Pr
   const compileToSandboxBytecode = requireExport<
     (source: string, profile: string) => string | CompileOutput
   >(wasmModule, 'compileToSandboxBytecode', '@hew-lang/wasm');
-  const runBytecode = requireExport<SandboxInterpreter['runBytecode']>(
+  const runBytecode = requireExport<typeof vmModule.runBytecode>(
     vmModule,
     'runBytecode',
     '@hew-lang/sandbox-vm',
   );
-  const codecBridge = requireExport<(request: string) => string>(
-    wasmModule,
-    'executeCodec',
-    '@hew-lang/wasm',
-  );
+  const bridges = {
+    codecBridge: wasmModule.executeCodec,
+    calendarBridge: wasmModule.executeCalendar,
+    regexBridge: wasmModule.compileSandboxRegex,
+  };
   const buildPlaygroundState = optionalExport<SandboxInterpreter['buildPlaygroundState']>(
     vmModule,
     'buildPlaygroundState',
@@ -309,7 +309,7 @@ export async function loadPublishedSandbox(options: SandboxLoadOptions = {}): Pr
       },
     },
     interpreter: {
-      runBytecode: (pkg, runOptions) => runBytecode(pkg, { ...runOptions, codecBridge }),
+      runBytecode: (pkg, runOptions) => runBytecode(pkg, { ...runOptions, ...bridges }),
       ...(buildPlaygroundState ? { buildPlaygroundState } : {}),
     },
     compilerVersion: await readCompilerVersion(),
